@@ -1,0 +1,30 @@
+#!/bin/bash
+#
+# Assumes the access id and keys are in the password store in the format of:
+#
+# AWS_ACCESS_KEY_ID=<id>
+# AWS_SECRET_ACCESS_KEY<key>
+#
+# It uses grep so that other data can be stored in the password store.
+#
+# Default path in the password store would be 'aws/my-account'
+#
+ENV=$1
+
+if [[ ! -a $(which pass) ]]; then
+  echo "Cannot find pass"
+  exit 1
+fi
+
+if [[ -z $ENV ]]; then
+  echo "Select AWS environment or profile"
+  exit 1
+fi
+
+if [[ $AWS_PASS_PATH == '' ]]; then
+  AWS_PASS_PATH='aws/'
+fi
+
+for i in $(pass ${AWS_PASS_PATH}/${ENV} |grep AWS); do
+  echo "export $i"
+done
