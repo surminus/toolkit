@@ -8,8 +8,10 @@ Outputs the secrets key to be exported. Export them by wrapping it:
 
 Assumes access ID and keys are in the password store in the format of:
 
+```
 AWS_ACCESS_KEY_ID=<id>
 AWS_SECRET_ACCESS_KEY<key>
+```
 
 Default path in the password store would be 'aws/my-account'. Change this by
 setting `AWS_PASS_PATH=foo` in `.bashrc`/`.zshrc`.
