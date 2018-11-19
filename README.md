@@ -1,4 +1,6 @@
-# aws-tools
+# toolkit
+
+A collection of little tools that I find useful
 
 ## awsexport
 
