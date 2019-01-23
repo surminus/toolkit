@@ -27,7 +27,8 @@ function is_git_repo() {
   if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     true
   else
-    false
+    echo "Not a git repository"
+    exit 1
   fi
 }
 
@@ -35,12 +36,16 @@ function is_git_repo() {
 
 # change directory to the root of the repo
 function root() {
-  cd $(git rev-parse --show-toplevel)
+  if is_git_repo; then
+    cd $(git rev-parse --show-toplevel)
+  fi
 }
 
 # print the name of the git repo
 function name() {
-  basename -s .git `git config --get remote.origin.url`
+  if is_git_repo; then
+    basename -s .git `git config --get remote.origin.url`
+  fi
 }
 
 ###### run
