@@ -1,0 +1,57 @@
+#!/bin/bash
+#
+# gkit
+#
+# gitkit: doing stuff in git repos outside of git itself
+
+####### usage
+function usage() {
+  cat <<EOF
+gkit
+====
+
+  $0 <command>
+
+Commands
+========
+
+  root: Change directory to root of the repository
+  name: Print the name of the repository
+EOF
+}
+
+####### helper functions
+COMMAND=$1
+
+function is_git_repo() {
+  if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    true
+  else
+    false
+  fi
+}
+
+####### in-repo command functions
+
+# change directory to the root of the repo
+function root() {
+  cd $(git rev-parse --show-toplevel)
+}
+
+# print the name of the git repo
+function name() {
+  basename -s .git `git config --get remote.origin.url`
+}
+
+###### run
+
+if [[ -z $COMMAND ]]; then
+  usage
+  exit 1
+fi
+
+case $COMMAND in
+  name) name;;
+  root) root;;
+  *) usage;;
+esac
