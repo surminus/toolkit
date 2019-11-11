@@ -1,0 +1,25 @@
+#!/bin/bash
+
+if ! nmcli con |grep -q Work; then
+  echo "Cannot find VPN configured called \"Work\""
+  echo "Please set this up before using!"
+  exit 1
+fi
+
+function vpn_id() {
+  nmcli con |awk '/Work/ {print $2}'
+}
+
+case $1 in
+  on|up)
+
+    nmcli con up uuid "$(vpn_id)"
+    ;;
+  off|down)
+    nmcli con down uuid "$(vpn_id)"
+    ;;
+  *)
+    echo "Arguments must be on, up, off or down"
+    exit 1
+    ;;
+esac
