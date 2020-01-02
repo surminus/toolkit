@@ -1,22 +1,59 @@
 #!/bin/bash
 
-if ! nmcli con |grep -q Work; then
-  echo "Cannot find VPN configured called \"Work\""
+CMD=$1
+NAME=$2
+
+if [[ -z $NAME ]]; then
+  echo "Must pick configured connection."
+  echo -e "Options are:\n"
+  nmcli con |grep vpn |awk '{print $1}'
+  exit 1
+fi
+
+if ! nmcli con |grep -q $NAME; then
+  echo "Cannot find VPN configured called \"${NAME}\""
   echo "Please set this up before using!"
   exit 1
 fi
 
-function vpn_id() {
-  nmcli con |awk '/Work/ {print $2}'
+is_active() {
+  status=$(nmcli con |grep ${NAME} | awk '{print $4}')
+
+  if [[ $status != "--" ]]; then
+    true
+  else
+    false
+  fi
 }
 
-case $1 in
-  on|up)
+function vpn_id() {
+  nmcli con |grep ${NAME} | awk '{print $2}'
+}
 
-    nmcli --ask con up uuid "$(vpn_id)"
+case $CMD in
+  on|up)
+    if is_active; then
+      echo "${NAME} VPN connection already active"
+    else
+      nmcli --ask con up uuid "$(vpn_id)"
+    fi
+
     ;;
   off|down)
-    nmcli con down uuid "$(vpn_id)"
+    if ! is_active; then
+      echo "${NAME} VPN connection already deactivated"
+    else
+      nmcli con down uuid "$(vpn_id)"
+    fi
+
+    ;;
+
+  status)
+    if is_active; then
+      echo "Active"
+    else
+      echo "Deactivated"
+    fi
     ;;
   *)
     echo "Arguments must be on, up, off or down"
