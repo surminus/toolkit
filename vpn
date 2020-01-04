@@ -3,58 +3,60 @@
 CMD=$1
 NAME=$2
 
-if [[ -z $NAME ]]; then
-  echo "Must pick configured connection."
-  echo -e "Options are:\n"
-  nmcli con |grep vpn |awk '{print $1}'
-  exit 1
-fi
+function name() {
+  if [[ -z $NAME ]]; then
+    echo "Must pick configured connection."
+    echo -e "Options are:\n"
+    nmcli con |grep vpn |awk '{print $1}'
+    exit 1
+  fi
 
-if ! nmcli con |grep -q $NAME; then
-  echo "Cannot find VPN configured called \"${NAME}\""
-  echo "Please set this up before using!"
-  exit 1
-fi
+  if ! nmcli con |grep -q $NAME; then
+    echo "Cannot find VPN configured called \"${NAME}\""
+    echo "Please set this up before using!"
+    exit 1
+  fi
+
+  echo $NAME
+}
 
 is_active() {
-  status=$(nmcli con |grep ${NAME} | awk '{print $4}')
+  status=$(nmcli con |grep $(name) | awk '{print $4}')
 
   if [[ $status != "--" ]]; then
-    true
+    echo "$(name) already active"
+    exit
   else
     false
   fi
 }
 
 function vpn_id() {
-  nmcli con |grep ${NAME} | awk '{print $2}'
+  nmcli con |grep $(name) | awk '{print $2}'
 }
 
 case $CMD in
   on|up)
-    if is_active; then
-      echo "${NAME} VPN connection already active"
-    else
-      nmcli --ask con up uuid "$(vpn_id)"
-    fi
-
+    is_active || nmcli --ask con up uuid "$(vpn_id)"
     ;;
-  off|down)
-    if ! is_active; then
-      echo "${NAME} VPN connection already deactivated"
-    else
-      nmcli con down uuid "$(vpn_id)"
-    fi
 
+  off|down)
+    is_active && nmcli con down uuid "$(vpn_id)"
     ;;
 
   status)
+    if [[ -z ${NAME} ]]; then
+      nmcli con |head -n1; nmcli con |grep vpn
+      exit
+    fi
+
     if is_active; then
-      echo "Active"
+      echo "on"
     else
-      echo "Deactivated"
+      echo "off"
     fi
     ;;
+
   *)
     echo "Arguments must be on, up, off or down"
     exit 1
