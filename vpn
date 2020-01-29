@@ -3,12 +3,22 @@
 CMD=$1
 NAME=$2
 
-function name() {
+function connections() {
+  nmcli con |grep vpn |awk '{print $1}'
+}
+
+function check_name() {
   if [[ -z $NAME ]]; then
-    echo "Must pick configured connection."
-    echo -e "Options are:\n"
-    nmcli con |grep vpn |awk '{print $1}'
-    exit 1
+    CONN_COUNT=$(connections | wc -l)
+
+    if [[ $CONN_COUNT -eq 1 ]]; then
+      NAME=$(connections)
+    elif [[ $CONN_COUNT -gt 1 ]] || [[ $CONN_COUNT -lt 1 ]]; then
+      echo "Must pick configured connection."
+      echo -e "Options are:\n"
+      connections
+      exit 1
+    fi
   fi
 
   if ! nmcli con |grep -q $NAME; then
@@ -16,17 +26,17 @@ function name() {
     echo "Please set this up before using!"
     exit 1
   fi
-
-  echo $NAME
 }
 
 function vpn_id() {
-  nmcli con |grep $(name) | awk '{print $2}'
+  check_name
+  nmcli con |grep $NAME | awk '{print $2}'
 }
 
 is_active() {
+  check_name
   if [[ -z $1 ]]; then
-    conn_name=$(name)
+    conn_name=$NAME
   else
     conn_name=$1
   fi
