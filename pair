@@ -1,0 +1,58 @@
+#!/bin/bash
+#
+ALIAS=$1
+ALIAS_FILE="$HOME/.pairs"
+EMAIL_SUFFIX=$(grep email "$ALIAS_FILE" | cut -d "=" -f2)
+
+usage() {
+  cat << EOF
+Usage: pair <alias | name | git user>
+
+Create a file called $ALIAS_FILE with a csv format of:
+
+  alias,full name,git user
+
+Ensure there is an email suffix for your org:
+
+  email=example.com
+EOF
+}
+
+if [[ -z "$EMAIL_SUFFIX" ]]; then
+  echo "Error: Missing email suffix in $ALIAS_FILE"
+  usage && exit 1
+fi
+
+if [[ -z "$ALIAS" ]]; then
+  usage && exit 1
+fi
+
+template() {
+  name=$1
+  email_prefix="$(echo "$1" | sed 's/ /./g' | tr '[:upper:]' '[:lower:]')"
+  git_user=$2
+
+  email="${email_prefix}@${EMAIL_SUFFIX}"
+
+
+  if [[ -n "$git_user" ]]; then
+  cat << EOF
+Co-authored-by: $git_user <$email>
+EOF
+  else
+  cat << EOF
+Co-authored-by: $name <$email>
+EOF
+  fi
+}
+
+NAME=$(grep -i "$ALIAS" "$ALIAS_FILE" | cut -d "," -f2)
+GIT_USER=$(grep -i "$ALIAS" "$ALIAS_FILE" | cut -d "," -f3)
+
+if [[ -z "$NAME" ]]; then
+  echo -e "Alias or name not found! Choose from:\n"
+  sort "$ALIAS_FILE" | grep -v "email"
+  exit 1
+fi
+
+template "$NAME" "$GIT_USER"
