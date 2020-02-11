@@ -1,10 +1,19 @@
 #!/bin/bash
 IMAGE=$1
+COMMAND=$2
 
 if [[ -z $IMAGE ]]; then
   echo "Please specify image: "
-  echo "$0 <image>"
+  echo "$0 <image> [command]"
   exit 1
 fi
 
-docker run --rm -it $1 /bin/bash
+# If nothing is set defaults to bash
+[[ -z $COMMAND ]] && COMMAND="/bin/bash"
+
+## Explicitly allows using default CMD
+if [[ $COMMAND == "default" ]]; then
+  COMMAND=""
+fi
+
+docker run --rm -it $IMAGE $COMMAND
