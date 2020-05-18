@@ -1,0 +1,30 @@
+#!/bin/bash
+#
+# I've had lots of networking issues recently and it's not always immediately
+# clear when this occurs. I want to be notified so I can understand the
+# situations when it's happening.
+#
+FAILURE_MEASURE=5
+
+FAIL_COUNT=0
+
+while true; do
+  if [[ $FAIL_COUNT -gt $FAILURE_MEASURE ]]; then
+    echo "$(date): Network down" | tee -a /var/log/network-check.log
+
+    notify-send "WARNING: network down!"
+
+    sleep 30
+  fi
+
+  if ! ping -w2 -nc 1 1.1.1.1 >/dev/null; then
+    echo "$(date): Ping to 1.1.1.1 failed" | tee -a /var/log/network-check.log
+
+    FAIL_COUNT=$(( FAIL_COUNT + 1 ))
+  else
+    # Reset the fail count
+    FAIL_COUNT=0
+  fi
+
+  sleep 1
+done
