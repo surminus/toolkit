@@ -1,0 +1,5 @@
+#!/bin/bash
+set -e
+
+sudo mv "${1}" /data/plex/Films/
+sudo chown -R plex:plex /data/plex
