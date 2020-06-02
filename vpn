@@ -1,111 +1,80 @@
 #!/bin/bash
+set -e
 
-CMD=$1
+COMMAND=$1
 NAME=$2
 
-function connections() {
-  nmcli con |grep vpn |awk '{print $1}'
+usage() {
+  echo "vpn [on | off | swap | status] [Work | Proton]"
 }
 
-function check_name() {
-  if [[ -z $NAME ]]; then
-    CONN_COUNT=$(connections | wc -l)
+if [[ -z $COMMAND ]]; then
+  usage
+  exit 1
+fi
 
-    if [[ $CONN_COUNT -eq 1 ]]; then
-      NAME=$(connections)
-    elif [[ $CONN_COUNT -gt 1 ]] || [[ $CONN_COUNT -lt 1 ]]; then
-      echo "Must pick configured connection."
-      echo -e "Options are:\n"
-      connections
+IS_ACTIVE=false
+if nmcli con show --active |grep -q vpn; then
+  IS_ACTIVE=true
+  ACTIVE_CONNECTION_NAME=$(nmcli con show --active |grep vpn | awk '{print $1}')
+fi
+
+
+turn_on() {
+  if [[ -z "${NAME}" ]]; then
+    usage
+    exit 1
+  fi
+
+  if [[ $IS_ACTIVE == "true" ]]; then
+    echo "VPN already active"
+  else
+    nmcli con up id "${NAME}"
+  fi
+}
+
+turn_off() {
+  if [[ -z "${NAME}" ]]; then
+    if [[ $IS_ACTIVE == "true" ]]; then
+      nmcli con down id "${ACTIVE_CONNECTION_NAME}"
+      exit
+    else
+      usage
       exit 1
     fi
   fi
 
-  if ! nmcli con |grep -q $NAME; then
-    echo "Cannot find VPN configured called \"${NAME}\""
-    echo "Please set this up before using!"
+  if [[ $IS_ACTIVE == "true" ]]; then
+    nmcli con down id "${NAME}"
+  else
+    echo "VPN not active"
+  fi
+}
+
+swap() {
+  if [[ $IS_ACTIVE == "false" ]]; then
+    echo "VPN not active, cannot swap"
     exit 1
   fi
+
+  case $ACTIVE_CONNECTION_NAME in
+    Work)
+      nmcli con down id Work
+      sleep 5
+      nmcli con up id Proton
+      ;;
+    Proton)
+      nmcli con down id Proton
+      sleep 5
+      nmcli con up id Work
+      ;;
+  esac
 }
 
-function vpn_id() {
-  check_name
-  nmcli con |grep $NAME | awk '{print $2}'
-}
-
-is_active() {
-  check_name
-  if [[ -z $1 ]]; then
-    conn_name=$NAME
-  else
-    conn_name=$1
-  fi
-
-  status=$(nmcli con |grep $conn_name | awk '{print $4}')
-
-  if [[ $status != "--" ]]; then
-    true
-  else
-    false
-  fi
-}
-
-function turn_on() {
-  nmcli --ask con up uuid "$(vpn_id)"
-}
-
-function turn_off() {
-  nmcli con down uuid "$(vpn_id)"
-}
-
-function swap() {
-  if is_active Work; then
-    NAME=Work turn_off && sleep 3
-    NAME=Proton turn_on
-  elif is_active Proton; then
-    NAME=Proton turn_off && sleep 3
-    NAME=Work turn_on
-  else
-    echo "No connections active."
-  fi
-}
-
-case $CMD in
-  on|up)
-    if is_active; then
-      echo "Already on"
-    else
-      turn_on
-    fi
-    ;;
-
-  off|down)
-    if is_active; then
-      turn_off
-    else
-      echo "Already off"
-    fi
-    ;;
-
-  status)
-    if [[ -z ${NAME} ]]; then
-      nmcli con |head -n1; nmcli con |grep vpn
-      exit
-    fi
-
-    if is_active; then
-      echo "on"
-    else
-      echo "off"
-    fi
-    ;;
-
-  swap)
-    swap
-    ;;
-
-  *)
-    echo "Arguments must be on, up, off or down"
-    exit 1
-    ;;
+case $COMMAND in
+  on) turn_on ;;
+  off) turn_off ;;
+  swap) swap ;;
+  status) nmcli con show |grep -e "NAME\|vpn" ;;
+  *) usage ;;
 esac
