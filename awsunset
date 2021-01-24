@@ -4,3 +4,8 @@
 for i in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
   echo "unset $i"
 done
+
+echo "unset AWS_ACCESS_KEYS_PROFILE"
+
+# this is a weird bug which is added by the export but can't understand how
+echo "unset export"

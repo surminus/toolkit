@@ -11,7 +11,7 @@
 #
 ENV=$1
 
-if [[ ! -a $(which pass) ]]; then
+if [[ ! -a $(command -v pass) ]]; then
   echo "Cannot find pass"
   exit 1
 fi
@@ -25,6 +25,8 @@ if [[ $AWS_PASS_PATH == '' ]]; then
   AWS_PASS_PATH='aws/'
 fi
 
-for i in $(pass ${AWS_PASS_PATH}/${ENV} |grep AWS); do
+for i in $(pass "${AWS_PASS_PATH}/${ENV}" |grep AWS); do
   echo "export $i"
 done
+
+echo "export AWS_ACCESS_KEYS_PROFILE=${ENV}"
