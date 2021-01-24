@@ -13,6 +13,13 @@ if [[ -z $COMMAND ]]; then
   exit 1
 fi
 
+if [[ $COMMAND == "on" ]]; then
+  if [[ $NAME != "Work" && $NAME != "Proton" ]]; then
+    usage
+    exit 1
+  fi
+fi
+
 IS_ACTIVE=false
 if nmcli con show --active |grep -q vpn; then
   IS_ACTIVE=true
@@ -29,7 +36,7 @@ turn_on() {
   if [[ $IS_ACTIVE == "true" ]]; then
     echo "VPN already active"
   else
-    nmcli con up id "${NAME}"
+    nmcli con up --ask id "${NAME}"
   fi
 }
 
