@@ -19,8 +19,6 @@ while true; do
   fi
 
   if ! ping -w5 -nc 1 1.1.1.1 >/dev/null; then
-    echo "$(date): Ping to 1.1.1.1 failed" | tee -a /var/log/network-check.log
-
     FAIL_COUNT=$(( FAIL_COUNT + 1 ))
   else
     # Reset the fail count
