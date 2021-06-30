@@ -16,13 +16,13 @@ if [[ ! -a $(command -v pass) ]]; then
   exit 1
 fi
 
-if [[ -z $ENV ]]; then
-  echo "Select AWS environment or profile"
-  exit 1
-fi
-
 if [[ $AWS_PASS_PATH == '' ]]; then
   AWS_PASS_PATH='aws/'
+fi
+
+if [[ -z $ENV ]]; then
+  echo -e "Select AWS environment or profile:\n$(pass ${AWS_PASS_PATH})"
+  exit 1
 fi
 
 for i in $(pass "${AWS_PASS_PATH}/${ENV}" |grep AWS); do
