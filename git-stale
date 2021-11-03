@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# set -euo pipefail
+
+git fetch -p -q
+
+local_branches=$(git for-each-ref --format '%(refname)' refs/heads | sed 's|refs/heads/||g' |sort)
+remote_branches=$(git ls-remote --quiet --heads | awk '{print $2}' | sed 's|refs/heads/||g' |sort)
+branches_to_delete=$(diff <(echo "${local_branches}") <(echo "${remote_branches}") | grep '^<' | awk '{print $2}')
+
+if [[ -z "${branches_to_delete}" ]]; then
+  echo "No stale branches discovered"
+  exit
+fi
+
+echo "Branches to delete:"
+for branch in ${branches_to_delete}; do
+  echo "${branch}"
+done
+
+read -p "Delete these branches [y/N]? : " -n 1 -r response
+echo
+
+if [[ ! ${response} =~ ^[Yy]$ ]]; then
+  echo "Exiting"
+  exit 1
+fi
+
+for branch in ${branches_to_delete}; do
+  git branch -D "${branch}"
+done
