@@ -6,9 +6,31 @@ if [[ -z $1 ]]; then
   exit 1
 fi
 
-NEW_TREE_PATH_NAME="$(basename ${PWD})@$1"
-NEW_TREE_PATH="${PWD}/../$NEW_TREE_PATH_NAME"
+BRANCH_NAME="$1"
 
-git worktree add "${NEW_TREE_PATH_NAME}" "$1"
+if [[ $2 =~ ^-d$ ]]; then
+  delete="True"
+fi
 
-cd $NEW_TREE_PATH
+proper_tree_path_name() {
+  git worktree list |awk "/$BRANCH_NAME/ {print \$1}"
+}
+
+if [[ ${delete} == "True" ]]; then
+  PROPER_TREE_PATH_NAME=$(proper_tree_path_name)
+
+  if [[ -z "${PROPER_TREE_PATH_NAME}" ]]; then
+    echo "Worktree for ${BRANCH_NAME} doesn't exist?"
+    exit 1
+  fi
+
+  echo "Deleting ${PROPER_TREE_PATH_NAME}"
+  git worktree remove "${PROPER_TREE_PATH_NAME}"
+  exit
+fi
+
+NEW_TREE_PATH_NAME="$(basename "${PWD}")@$BRANCH_NAME"
+git worktree add "../${NEW_TREE_PATH_NAME}" "$BRANCH_NAME" >/dev/null
+
+PROPER_TREE_PATH_NAME=$(proper_tree_path_name)
+echo "cd $PROPER_TREE_PATH_NAME"
