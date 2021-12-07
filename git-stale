@@ -17,8 +17,20 @@ for branch in ${branches_to_delete}; do
   echo "${branch}"
 done
 
-read -p "Delete these branches [y/N]? : " -n 1 -r response
+read -p "Delete these branches [y/n/[p]ick]? : " -n 1 -r response
 echo
+
+if [[ ${response} =~ ^[Pp]$ ]]; then
+  for branch in ${branches_to_delete}; do
+    read -p "Delete ${branch}? [y/n] : " -n 1 -r answer
+
+    if [[ ${answer} =~ ^[Yy]$ ]]; then
+      git branch -D "${branch}"
+    fi
+  done
+
+  exit
+fi
 
 if [[ ! ${response} =~ ^[Yy]$ ]]; then
   echo "Exiting"
