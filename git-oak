@@ -1,0 +1,14 @@
+#!/bin/bash
+set -e
+
+if [[ -z $1 ]]; then
+  echo "Must provide branch name as first argument"
+  exit 1
+fi
+
+NEW_TREE_PATH_NAME="$(basename ${PWD})@$1"
+NEW_TREE_PATH="${PWD}/../$NEW_TREE_PATH_NAME"
+
+git worktree add "${NEW_TREE_PATH_NAME}" "$1"
+
+cd $NEW_TREE_PATH
