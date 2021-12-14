@@ -1,0 +1,43 @@
+#!/bin/bash
+set -e
+
+SEARCH_WORD=$1
+
+if [[ -n "$SEARCH_WORD" ]]; then
+  BRANCH_NAMES=$(git for-each-ref refs/heads --format='%(refname)' |grep "$SEARCH_WORD" |cut -d'/' -f3 |sort)
+else
+  BRANCH_NAMES=$(git for-each-ref refs/heads --format='%(refname)' |cut -d'/' -f3 |sort)
+fi
+
+# I tried various ways to split the string and then got fed up with bash, so
+# doing it the easy way
+BRANCH_COUNTER=0
+for branch in $BRANCH_NAMES; do BRANCH_COUNTER=$(( BRANCH_COUNTER + 1 )); done
+
+if [[ $BRANCH_COUNTER -eq 0 ]]; then exit; fi
+
+if [[ $BRANCH_COUNTER -eq 1 ]]; then
+  git switch "$BRANCH_NAMES"
+  exit
+fi
+
+count=0
+for branch in $BRANCH_NAMES; do
+  echo -e "${count}:\t${branch}"
+  count=$(( count + 1 ))
+done
+
+read -p "Select branch: " -n 1 -r answer
+echo
+
+count=0
+for branch in $BRANCH_NAMES; do
+  if [[ "$count" == "$answer" ]]; then
+    git switch "$branch"
+    exit
+  fi
+  count=$(( count + 1 ))
+done
+
+echo "Unable to switch branch"
+exit 1
