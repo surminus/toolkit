@@ -23,6 +23,7 @@ echo
 if [[ ${response} =~ ^[Pp]$ ]]; then
   for branch in ${branches_to_delete}; do
     read -p "Delete ${branch}? [y/n] : " -n 1 -r answer
+    echo
 
     if [[ ${answer} =~ ^[Yy]$ ]]; then
       git branch -D "${branch}"
