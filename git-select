@@ -1,41 +1,55 @@
 #!/bin/bash
 set -e
 
+count_branches() {
+  # I tried various ways to split the string and then got fed up with bash, so
+  # doing it the easy way
+  local branch_names=$1
+  local branch_counter=0
+  for branch in $branch_names; do branch_counter=$(( branch_counter + 1 )); done
+
+  echo "${branch_counter}"
+}
+
+select_branch() {
+  branch_names=$1
+  branch_counter=$(count_branches "${branch_names}")
+
+  if [[ $branch_counter -eq 0 ]]; then exit; fi
+  if [[ $branch_counter -eq 1 ]]; then git switch "${branch_names}" && exit; fi
+
+  local count=0
+  echo -e "ID\tBranch (sorted by age)"
+  echo -e "--\t------"
+
+  for branch in ${branch_names}; do
+    echo -e "${count}\t${branch}"
+    count=$(( count + 1 ))
+  done
+
+  read -p "Select branch: " -r ANSWER
+  echo
+}
+
 SEARCH_WORD=$1
 BRANCH_NAMES=$(git for-each-ref refs/heads --format='%(refname)' --sort='committerdate' |cut -d'/' -f3)
 [[ -n "$SEARCH_WORD" ]] && BRANCH_NAMES=$(echo "$BRANCH_NAMES" |grep "$SEARCH_WORD")
 
-# I tried various ways to split the string and then got fed up with bash, so
-# doing it the easy way
-BRANCH_COUNTER=0
-for branch in $BRANCH_NAMES; do BRANCH_COUNTER=$(( BRANCH_COUNTER + 1 )); done
+select_branch "${BRANCH_NAMES}"
 
-if [[ $BRANCH_COUNTER -eq 0 ]]; then exit; fi
-if [[ $BRANCH_COUNTER -eq 1 ]]; then
-  git switch "$BRANCH_NAMES"
-  exit
+if [[ ! "${ANSWER}" =~ [[:digit:]]+ ]]; then
+  BRANCH_NAMES=$(git for-each-ref refs/heads --format='%(refname)' --sort='committerdate' |grep "${ANSWER}" |cut -d'/' -f3)
+  select_branch "${BRANCH_NAMES}"
 fi
 
 count=0
-echo -e "ID\tBranch (Age)"
-echo -e "--\t------------"
-
 for branch in $BRANCH_NAMES; do
-  echo -e "${count}\t${branch} ($(git log --pretty=format:'%cr' "${branch}" -n 1))"
-  count=$(( count + 1 ))
-done
-
-read -p "Select branch: " -r answer
-echo
-
-count=0
-for branch in $BRANCH_NAMES; do
-  if [[ "$count" == "$answer" ]]; then
+  if [[ "$count" == "$ANSWER" ]]; then
     git switch "$branch"
     exit
   fi
   count=$(( count + 1 ))
 done
 
-echo "Unable to switch branch"
+echo "ERROR: couldn't find branch"
 exit 1
