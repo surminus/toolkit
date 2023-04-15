@@ -1,0 +1,9 @@
+#!/bin/bash
+set -euo pipefail
+
+TEMPDIR=$(mktemp -d)
+pushd "$TEMPDIR"
+wget -O discord.deb "https://discordapp.com/api/download?platform=linux&format=deb"
+sudo dpkg -i discord.deb
+popd
+rm -rf "$TEMPDIR"
