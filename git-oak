@@ -1,36 +1,42 @@
 #!/bin/bash
-set -e
+set -eo pipefail
 
-if [[ -z $1 ]]; then
-  echo "Must provide branch name as first argument"
-  exit 1
-fi
-
-BRANCH_NAME="$1"
-
-if [[ $2 =~ ^-d$ ]]; then
-  delete="True"
-fi
-
-proper_tree_path_name() {
-  git worktree list |awk "/$BRANCH_NAME/ {print \$1}"
-}
-
-if [[ ${delete} == "True" ]]; then
-  PROPER_TREE_PATH_NAME=$(proper_tree_path_name)
-
-  if [[ -z "${PROPER_TREE_PATH_NAME}" ]]; then
-    echo "Worktree for ${BRANCH_NAME} doesn't exist?"
+main() {
+  if [[ -z $1 ]]; then
+    echo "Must provide branch name as first argument"
     exit 1
   fi
 
-  echo "Deleting ${PROPER_TREE_PATH_NAME}"
-  git worktree remove "${PROPER_TREE_PATH_NAME}"
-  exit
-fi
+  local branch_name="$1"
 
-NEW_TREE_PATH_NAME="$(basename "${PWD}")@$BRANCH_NAME"
-git worktree add "../${NEW_TREE_PATH_NAME}" "$BRANCH_NAME" >/dev/null
+  if [[ $2 =~ ^-d$ ]]; then
+    local delete="True"
+  fi
 
-PROPER_TREE_PATH_NAME=$(proper_tree_path_name)
-echo "cd $PROPER_TREE_PATH_NAME"
+  if [[ ${delete} == "True" ]]; then
+    PROPER_TREE_PATH_NAME=$(proper_tree_path_name "${branch_name}")
+
+    if [[ -z "${PROPER_TREE_PATH_NAME}" ]]; then
+      echo "Worktree for ${branch_name} doesn't exist?"
+      exit 1
+    fi
+
+    echo "Deleting ${PROPER_TREE_PATH_NAME}"
+    git worktree remove "${PROPER_TREE_PATH_NAME}"
+    exit
+  fi
+
+  _new_tree_path_name="$(basename "${PWD}")@${branch_name}"
+  local new_tree_path_name=${_new_tree_path_name}
+
+  git worktree add -b "${branch_name}" "../${new_tree_path_name}" >/dev/null
+
+  proper_tree_path_name=$(proper_tree_path_name "${branch_name}")
+  echo "cd ${proper_tree_path_name}"
+}
+
+proper_tree_path_name() {
+  git worktree list |awk "/$1/ {print \$1}"
+}
+
+main "$@"
