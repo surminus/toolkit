@@ -22,6 +22,8 @@ echo
 
 if [[ ${response} =~ ^[Pp]$ ]]; then
   for branch in ${branches_to_delete}; do
+    git show "${branch}"
+    echo
     read -p "Delete ${branch}? [y/n] : " -n 1 -r answer
     echo
 
