@@ -1,0 +1,6 @@
+#!/bin/bash
+#
+# When I install a new version of Go, install commonly used packages
+#
+go install golang.org/x/tools/gopls@latest
+go install github.com/fatih/gomodifytags@latest
