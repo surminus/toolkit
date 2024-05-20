@@ -1,45 +1,99 @@
 #!/usr/bin/env bash
 # set -euo pipefail
 
+# The number of days to try removing old branches
+OLDER_THAN_DAYS=365
+
 git fetch -p -q
 
-local_branches=$(git for-each-ref --format '%(refname)' refs/heads | sed 's|refs/heads/||g' |sort)
-remote_branches=$(git ls-remote --quiet --heads | awk '{print $2}' | sed 's|refs/heads/||g' |sort)
-branches_to_delete=$(diff <(echo "${local_branches}") <(echo "${remote_branches}") | grep '^<' | awk '{print $2}')
+function stale() {
+  local_branches=$(git for-each-ref --format '%(refname)' refs/heads | sed 's|refs/heads/||g' |sort)
+  remote_branches=$(git ls-remote --quiet --heads | awk '{print $2}' | sed 's|refs/heads/||g' |sort)
+  branches_to_delete=$(diff <(echo "${local_branches}") <(echo "${remote_branches}") | grep '^<' | awk '{print $2}')
 
-if [[ -z "${branches_to_delete}" ]]; then
-  echo "No stale branches discovered"
-  exit
-fi
+  if [[ -z "${branches_to_delete}" ]]; then
+    echo "No stale branches discovered"
+    return
+  fi
 
-echo "Branches to delete:"
-for branch in ${branches_to_delete}; do
-  echo "${branch}"
-done
-
-read -p "Delete these branches [y/n/[p]ick]? : " -n 1 -r response
-echo
-
-if [[ ${response} =~ ^[Pp]$ ]]; then
+  echo "Branches to delete:"
   for branch in ${branches_to_delete}; do
-    git show "${branch}"
-    echo
-    read -p "Delete ${branch}? [y/n] : " -n 1 -r answer
-    echo
-
-    if [[ ${answer} =~ ^[Yy]$ ]]; then
-      git branch -D "${branch}"
-    fi
+    echo "${branch}"
   done
 
-  exit
-fi
+  read -p "Delete these branches [y/n/[p]ick]? : " -n 1 -r response
+  echo
 
-if [[ ! ${response} =~ ^[Yy]$ ]]; then
-  echo "Exiting"
-  exit 1
-fi
+  if [[ ${response} =~ ^[Pp]$ ]]; then
+    for branch in ${branches_to_delete}; do
+      git show "${branch}"
+      echo
+      read -p "Delete ${branch}? [y/n] : " -n 1 -r answer
+      echo
 
-for branch in ${branches_to_delete}; do
-  git branch -D "${branch}"
-done
+      if [[ ${answer} =~ ^[Yy]$ ]]; then
+        git branch -D "${branch}"
+      fi
+    done
+
+    return
+  fi
+
+  if [[ ! ${response} =~ ^[Yy]$ ]]; then
+    echo "Exiting"
+    return
+  fi
+
+  for branch in ${branches_to_delete}; do
+    git branch -D "${branch}"
+  done
+}
+
+function merged() {
+  default_branch=$(git symbolic-ref refs/remotes/origin/HEAD | sed 's@^refs/remotes/origin/@@')
+  if git branch --merged | grep -qv "${default_branch}"; then
+    echo "Deleting merged branches:"
+    git branch --merged | grep -v "${default_branch}" | xargs git branch -d
+  else
+    echo "No merged branches discovered"
+  fi
+}
+
+function old() {
+  local older_than_seconds=$((60 * 60 * 24 * OLDER_THAN_DAYS))
+
+  old_branches=$(git for-each-ref refs/heads | while read -r commit _type ref; do
+    current=$(date +%s)
+    headcd=$(git log -1 --pretty=%cd --date=format:%s "${commit}")
+
+    if [[ $((current-headcd)) -ge ${older_than_seconds} ]]; then
+      echo "$ref" | sed 's|refs/heads/||g' |sort
+    fi
+  done)
+
+  if [[ -z "${old_branches}" ]]; then
+    echo "No old branches discovered"
+    return
+  fi
+
+  echo "Old branches to delete:"
+  for branch in ${old_branches}; do
+    echo "${branch}"
+  done
+
+  read -p "Delete these branches [y/n]? : " -n 1 -r response
+  echo
+
+  if [[ ! ${response} =~ ^[Yy]$ ]]; then
+    echo "Exiting"
+    return
+  fi
+
+  for branch in ${old_branches}; do
+    git branch -D "${branch}"
+  done
+}
+
+stale
+merged
+old
