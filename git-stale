@@ -49,17 +49,17 @@ function stale() {
   done
 }
 
-function merged() {
-  default_branch=$(git symbolic-ref refs/remotes/origin/HEAD | sed 's@^refs/remotes/origin/@@')
-  merged_branches=$(git branch --merged | grep -v "${default_branch}\|*" | sort)
+function interactive_branch_delete() {
+  branches=$1
+  title=$2
 
-  if [[ -z "${merged_branches}" ]]; then
-    echo "No merged branches discovered"
+  if [[ -z "${branches}" ]]; then
+    echo "No ${title} branches discovered"
     return
   fi
 
-  echo "Merged branches to delete:"
-  for branch in ${merged_branches}; do
+  echo "${title^} branches to delete:"
+  for branch in ${branches}; do
     echo "${branch}"
   done
 
@@ -71,9 +71,16 @@ function merged() {
     return
   fi
 
-  for branch in ${merged_branches}; do
+  for branch in ${branches}; do
     git branch -D "${branch}"
   done
+}
+
+function merged() {
+  default_branch=$(git symbolic-ref refs/remotes/origin/HEAD | sed 's@^refs/remotes/origin/@@')
+  merged_branches=$(git branch --merged | grep -v "${default_branch}\|*" | sort)
+
+  interactive_branch_delete "${merged_branches}" "merged"
 }
 
 function old() {
@@ -88,27 +95,7 @@ function old() {
     fi
   done)
 
-  if [[ -z "${old_branches}" ]]; then
-    echo "No old branches discovered"
-    return
-  fi
-
-  echo "Old branches to delete:"
-  for branch in ${old_branches}; do
-    echo "${branch}"
-  done
-
-  read -p "Delete these branches [y/n]? : " -n 1 -r response
-  echo
-
-  if [[ ! ${response} =~ ^[Yy]$ ]]; then
-    echo "Exiting"
-    return
-  fi
-
-  for branch in ${old_branches}; do
-    git branch -D "${branch}"
-  done
+  interactive_branch_delete "${old_branches}" "old"
 }
 
 stale
