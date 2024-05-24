@@ -16,7 +16,7 @@ function stale() {
     return
   fi
 
-  echo "Branches to delete:"
+  echo "Stale branches to delete:"
   for branch in ${branches_to_delete}; do
     echo "${branch}"
   done
@@ -51,12 +51,29 @@ function stale() {
 
 function merged() {
   default_branch=$(git symbolic-ref refs/remotes/origin/HEAD | sed 's@^refs/remotes/origin/@@')
-  if git branch --merged | grep -qv "${default_branch}"; then
-    echo "Deleting merged branches:"
-    git branch --merged | grep -v "${default_branch}" | xargs git branch -d
-  else
+  merged_branches=$(git branch --merged | grep -v "${default_branch}\|*" | sort)
+
+  if [[ -z "${merged_branches}" ]]; then
     echo "No merged branches discovered"
+    return
   fi
+
+  echo "Merged branches to delete:"
+  for branch in ${merged_branches}; do
+    echo "${branch}"
+  done
+
+  read -p "Delete these branches [y/n]? : " -n 1 -r response
+  echo
+
+  if [[ ! ${response} =~ ^[Yy]$ ]]; then
+    echo "Exiting"
+    return
+  fi
+
+  for branch in ${merged_branches}; do
+    git branch -D "${branch}"
+  done
 }
 
 function old() {
