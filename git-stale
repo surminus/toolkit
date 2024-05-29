@@ -4,51 +4,6 @@
 # The number of days to try removing old branches
 OLDER_THAN_DAYS=365
 
-git fetch -p -q
-
-function stale() {
-  local_branches=$(git for-each-ref --format '%(refname)' refs/heads | sed 's|refs/heads/||g' |sort)
-  remote_branches=$(git ls-remote --quiet --heads | awk '{print $2}' | sed 's|refs/heads/||g' |sort)
-  branches_to_delete=$(diff <(echo "${local_branches}") <(echo "${remote_branches}") | grep '^<' | awk '{print $2}')
-
-  if [[ -z "${branches_to_delete}" ]]; then
-    echo "No stale branches discovered"
-    return
-  fi
-
-  echo "Stale branches to delete:"
-  for branch in ${branches_to_delete}; do
-    echo "${branch}"
-  done
-
-  read -p "Delete these branches [y/n/[p]ick]? : " -n 1 -r response
-  echo
-
-  if [[ ${response} =~ ^[Pp]$ ]]; then
-    for branch in ${branches_to_delete}; do
-      git show "${branch}"
-      echo
-      read -p "Delete ${branch}? [y/n] : " -n 1 -r answer
-      echo
-
-      if [[ ${answer} =~ ^[Yy]$ ]]; then
-        git branch -D "${branch}"
-      fi
-    done
-
-    return
-  fi
-
-  if [[ ! ${response} =~ ^[Yy]$ ]]; then
-    echo "Exiting"
-    return
-  fi
-
-  for branch in ${branches_to_delete}; do
-    git branch -D "${branch}"
-  done
-}
-
 function interactive_branch_delete() {
   branches=$1
   title=$2
@@ -63,17 +18,39 @@ function interactive_branch_delete() {
     echo "${branch}"
   done
 
-  read -p "Delete these branches [y/n]? : " -n 1 -r response
+  read -p "Delete these branches [y/n/[p]ick]? : " -n 1 -r response
   echo
 
+  if [[ ${response} =~ ^[Pp]$ ]]; then
+    for branch in ${branches}; do
+      git show "${branch}"
+      echo
+      read -p "Delete ${branch}? [y/n] : " -n 1 -r answer
+      echo
+
+      if [[ ${answer} =~ ^[Yy]$ ]]; then
+        git branch -D "${branch}"
+      fi
+    done
+
+    return
+  fi
+
   if [[ ! ${response} =~ ^[Yy]$ ]]; then
-    echo "Exiting"
     return
   fi
 
   for branch in ${branches}; do
     git branch -D "${branch}"
   done
+}
+
+function stale() {
+  local_branches=$(git for-each-ref --format '%(refname)' refs/heads | sed 's|refs/heads/||g' |sort)
+  remote_branches=$(git ls-remote --quiet --heads | awk '{print $2}' | sed 's|refs/heads/||g' |sort)
+  stale_branches=$(diff <(echo "${local_branches}") <(echo "${remote_branches}") | grep '^<' | awk '{print $2}')
+
+  interactive_branch_delete "${stale_branches}" "stale"
 }
 
 function merged() {
@@ -98,6 +75,12 @@ function old() {
   interactive_branch_delete "${old_branches}" "old"
 }
 
-stale
-merged
-old
+function main() {
+  git fetch -p -q
+
+  stale
+  merged
+  old
+}
+
+main
