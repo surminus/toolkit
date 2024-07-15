@@ -2,5 +2,18 @@
 #
 # When I install a new version of Go, install commonly used packages
 #
-go install golang.org/x/tools/gopls@latest
-go install github.com/fatih/gomodifytags@latest
+plugins=(
+  github.com/fatih/gomodifytags
+  github.com/go-jira/jira/cmd/jira
+  github.com/golangci/golangci-lint/cmd/golangci-lint
+  github.com/google/go-jsonnet/cmd/jsonnet
+  github.com/silenceper/gowatch
+  golang.org/x/tools/gopls
+)
+
+for plugin in "${plugins[@]}"; do
+  echo "Installing ${plugin} ..."
+  go install "${plugin}@latest"
+done
+
+asdf reshim golang
