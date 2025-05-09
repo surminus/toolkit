@@ -15,5 +15,3 @@ for plugin in "${plugins[@]}"; do
   echo "Installing ${plugin} ..."
   go install "${plugin}@latest"
 done
-
-asdf reshim golang
