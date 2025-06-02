@@ -1,0 +1,19 @@
+#!/bin/bash
+
+PULL_REQUESTS=$(gh pr list --author app/dependabot --state open --json 'number,mergeStateStatus' --jq '.[] | select(.mergeStateStatus == "CLEAN") | .number')
+
+if [[ -z ${PULL_REQUESTS} ]]; then
+    echo "No open pull requests from Dependabot"
+    exit 0
+fi
+
+for PR in ${PULL_REQUESTS}; do
+    gh pr view "${PR}"
+
+    read -p "Merge PR ${PR}? : " -n 1 -r response
+    echo
+
+    if [[ ${response} =~ ^[Yy]$ ]]; then
+      gh pr merge --rebase "${PR}"
+    fi
+done
