@@ -3,12 +3,15 @@
 # When I install a new version of Go, install commonly used packages
 #
 plugins=(
+  github.com/cloudflare/cloudflare-go/cmd/flarectl
   github.com/fatih/gomodifytags
-  github.com/go-jira/jira/cmd/jira
+  github.com/go-delve/delve/cmd/dlv
   github.com/golangci/golangci-lint/cmd/golangci-lint
   github.com/google/go-jsonnet/cmd/jsonnet
   github.com/silenceper/gowatch
+  golang.org/x/tools/cmd/goimports
   golang.org/x/tools/gopls
+  honnef.co/go/tools/cmd/staticcheck
 )
 
 for plugin in "${plugins[@]}"; do
