@@ -1,19 +1,28 @@
 #!/bin/bash
+set -e
 
 PULL_REQUESTS=$(gh pr list --author app/dependabot --state open --json 'number,mergeStateStatus' --jq '.[] | select(.mergeStateStatus == "CLEAN") | .number')
 
-if [[ -z ${PULL_REQUESTS} ]]; then
-    echo "No open pull requests from Dependabot"
-    exit 0
-fi
-
 for PR in ${PULL_REQUESTS}; do
-    gh pr view "${PR}"
+    gh pr view "${PR}" --json title --template '{{ .title }}'
 
     read -p "Merge PR ${PR}? : " -n 1 -r response
     echo
 
     if [[ ${response} =~ ^[Yy]$ ]]; then
       gh pr merge --rebase "${PR}"
+    fi
+done
+
+BLOCKED_PULL_REQUESTS=$(gh pr list --author app/dependabot --state open --json 'number,mergeStateStatus' --jq '.[] | select(.mergeStateStatus == "BLOCKED") | .number')
+
+for PR in ${BLOCKED_PULL_REQUESTS}; do
+    gh pr view "${PR}" --json title --template '{{ .title }}'
+
+    read -p "Rebase blocked PR ${PR}? : " -n 1 -r response
+    echo
+
+    if [[ ${response} =~ ^[Yy]$ ]]; then
+      gh pr update-branch --rebase "${PR}"
     fi
 done
