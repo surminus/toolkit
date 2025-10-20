@@ -1,16 +1,26 @@
 #!/bin/bash
 set -e
 
+AUTO_YES=false
+if [[ "$1" == "-y" ]] || [[ "$1" == "--yes" ]]; then
+    AUTO_YES=true
+fi
+
 PULL_REQUESTS=$(gh pr list --author app/dependabot --state open --json 'number,mergeStateStatus' --jq '.[] | select(.mergeStateStatus == "CLEAN") | .number')
 
 for PR in ${PULL_REQUESTS}; do
     gh pr view "${PR}" --json title --template '{{ .title }}'
 
-    read -p "Merge PR ${PR}? : " -n 1 -r response
-    echo
+    if [[ ${AUTO_YES} == true ]]; then
+        echo " - Auto-merging PR ${PR}"
+        gh pr merge --rebase "${PR}"
+    else
+        read -p "Merge PR ${PR}? : " -n 1 -r response
+        echo
 
-    if [[ ${response} =~ ^[Yy]$ ]]; then
-      gh pr merge --rebase "${PR}"
+        if [[ ${response} =~ ^[Yy]$ ]]; then
+          gh pr merge --rebase "${PR}"
+        fi
     fi
 done
 
@@ -19,10 +29,15 @@ BLOCKED_PULL_REQUESTS=$(gh pr list --author app/dependabot --state open --json '
 for PR in ${BLOCKED_PULL_REQUESTS}; do
     gh pr view "${PR}" --json title --template '{{ .title }}'
 
-    read -p "Rebase blocked PR ${PR}? : " -n 1 -r response
-    echo
+    if [[ ${AUTO_YES} == true ]]; then
+        echo " - Auto-rebasing blocked PR ${PR}"
+        gh pr update-branch --rebase "${PR}"
+    else
+        read -p "Rebase blocked PR ${PR}? : " -n 1 -r response
+        echo
 
-    if [[ ${response} =~ ^[Yy]$ ]]; then
-      gh pr update-branch --rebase "${PR}"
+        if [[ ${response} =~ ^[Yy]$ ]]; then
+          gh pr update-branch --rebase "${PR}"
+        fi
     fi
 done
