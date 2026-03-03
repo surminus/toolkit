@@ -2,41 +2,57 @@
 set -eo pipefail
 
 main() {
-  if [[ -z $1 ]]; then
-    echo "Must provide branch name as first argument"
+  local delete=false
+  local branch_name=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -d) delete=true ;;
+      *)  branch_name="$1" ;;
+    esac
+    shift
+  done
+
+  if [[ -z "${branch_name}" ]]; then
+    echo "Must provide branch name as argument"
     exit 1
   fi
 
-  local branch_name="$1"
+  if [[ "${delete}" == true ]]; then
+    local tree_path
+    tree_path=$(proper_tree_path_name "${branch_name}")
 
-  if [[ $2 =~ ^-d$ ]]; then
-    local delete="True"
-  fi
-
-  if [[ ${delete} == "True" ]]; then
-    PROPER_TREE_PATH_NAME=$(proper_tree_path_name "${branch_name}")
-
-    if [[ -z "${PROPER_TREE_PATH_NAME}" ]]; then
+    if [[ -z "${tree_path}" ]]; then
       echo "Worktree for ${branch_name} doesn't exist?"
       exit 1
     fi
 
-    echo "Deleting ${PROPER_TREE_PATH_NAME}"
-    git worktree remove "${PROPER_TREE_PATH_NAME}"
+    echo "Deleting ${tree_path}"
+    git worktree remove "${tree_path}"
     exit
   fi
 
-  _new_tree_path_name="$(basename "${PWD}")@${branch_name}"
-  local new_tree_path_name=${_new_tree_path_name}
+  local new_tree_path_name="$(basename "${PWD}")@${branch_name}"
 
-  git worktree add -b "${branch_name}" "../${new_tree_path_name}" >/dev/null
+  if git show-ref --verify --quiet "refs/heads/${branch_name}"; then
+    git worktree add "../${new_tree_path_name}" "${branch_name}" >/dev/null
+  else
+    git worktree add -b "${branch_name}" "../${new_tree_path_name}" >/dev/null
+  fi
 
-  proper_tree_path_name=$(proper_tree_path_name "${branch_name}")
-  echo "cd ${proper_tree_path_name}"
+  local tree_path
+  tree_path=$(proper_tree_path_name "${branch_name}")
+
+  if [[ -z "${tree_path}" ]]; then
+    echo "Failed to find worktree after creation"
+    exit 1
+  fi
+
+  echo "cd '${tree_path}'"
 }
 
 proper_tree_path_name() {
-  git worktree list |awk "/$1/ {print \$1}"
+  git worktree list | grep -F "[$1]" | awk '{print $1}'
 }
 
 main "$@"
