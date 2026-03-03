@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# set -euo pipefail
+set -euo pipefail
 
 # The number of days to try removing old branches
 OLDER_THAN_DAYS=365
 
 function interactive_branch_delete() {
-  branches=$1
-  title=$2
+  local branches=$1
+  local title=$2
 
   if [[ -z "${branches}" ]]; then
     echo "No ${title} branches discovered"
@@ -46,33 +46,97 @@ function interactive_branch_delete() {
 }
 
 function stale() {
-  local_branches=$(git for-each-ref --format '%(refname)' refs/heads | sed 's|refs/heads/||g' |sort)
-  remote_branches=$(git ls-remote --quiet --heads | awk '{print $2}' | sed 's|refs/heads/||g' |sort)
-  stale_branches=$(diff <(echo "${local_branches}") <(echo "${remote_branches}") | grep '^<' | awk '{print $2}')
+  local default_branch
+  default_branch=$(git symbolic-ref refs/remotes/origin/HEAD | sed 's@^refs/remotes/origin/@@')
+
+  local local_branches
+  local_branches=$(git for-each-ref --format '%(refname)' refs/heads | sed 's|refs/heads/||g' | sort)
+
+  local remote_branches
+  remote_branches=$(git ls-remote --quiet --heads | awk '{print $2}' | sed 's|refs/heads/||g' | sort)
+
+  local stale_branches
+  stale_branches=$(diff <(echo "${local_branches}") <(echo "${remote_branches}") | grep '^<' | awk '{print $2}' | grep -vxF "${default_branch}")
 
   interactive_branch_delete "${stale_branches}" "stale"
 }
 
 function merged() {
+  local default_branch
   default_branch=$(git symbolic-ref refs/remotes/origin/HEAD | sed 's@^refs/remotes/origin/@@')
-  merged_branches=$(git branch --merged | grep -v "${default_branch}\|*" | sort)
+
+  local merged_branches
+  merged_branches=$(git branch --merged | grep -v "${default_branch}\|\*" | sort)
 
   interactive_branch_delete "${merged_branches}" "merged"
 }
 
 function old() {
   local older_than_seconds=$((60 * 60 * 24 * OLDER_THAN_DAYS))
+  local current
+  current=$(date +%s)
 
+  local old_branches
   old_branches=$(git for-each-ref refs/heads | while read -r commit _type ref; do
-    current=$(date +%s)
+    local headcd
     headcd=$(git log -1 --pretty=%cd --date=format:%s "${commit}")
 
     if [[ $((current-headcd)) -ge ${older_than_seconds} ]]; then
-      echo "$ref" | sed 's|refs/heads/||g' |sort
+      echo "$ref" | sed 's|refs/heads/||g'
     fi
-  done)
+  done | sort)
 
   interactive_branch_delete "${old_branches}" "old"
+}
+
+function interactive_worktree_delete() {
+  local worktrees=$1
+
+  if [[ -z "${worktrees}" ]]; then
+    echo "No stale worktrees discovered"
+    return
+  fi
+
+  echo "Worktrees to delete:"
+  for wt in ${worktrees}; do
+    echo "${wt}"
+  done
+
+  read -p "Delete these worktrees [y/n/[p]ick]? : " -n 1 -r response
+  echo
+
+  if [[ ${response} =~ ^[Pp]$ ]]; then
+    for wt in ${worktrees}; do
+      echo "Worktree: ${wt}"
+      echo
+      read -p "Delete ${wt}? [y/n] : " -n 1 -r answer
+      echo
+
+      if [[ ${answer} =~ ^[Yy]$ ]]; then
+        git worktree remove "${wt}"
+      fi
+    done
+
+    return
+  fi
+
+  if [[ ! ${response} =~ ^[Yy]$ ]]; then
+    return
+  fi
+
+  for wt in ${worktrees}; do
+    git worktree remove "${wt}"
+  done
+}
+
+function worktrees() {
+  local main_worktree
+  main_worktree=$(git worktree list | head -1 | awk '{print $1}')
+
+  local stale_worktrees
+  stale_worktrees=$(git worktree list | awk -v main="${main_worktree}" '$1 != main {print $1}')
+
+  interactive_worktree_delete "${stale_worktrees}"
 }
 
 function main() {
@@ -81,6 +145,7 @@ function main() {
   stale
   merged
   old
+  worktrees
 }
 
 main
