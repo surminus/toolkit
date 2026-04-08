@@ -45,6 +45,10 @@ function interactive_branch_delete() {
   done
 }
 
+function worktree_branches() {
+  git worktree list --porcelain | grep '^branch ' | sed 's|^branch refs/heads/||'
+}
+
 function stale() {
   local default_branch
   default_branch=$(git symbolic-ref refs/remotes/origin/HEAD | sed 's@^refs/remotes/origin/@@')
@@ -56,7 +60,10 @@ function stale() {
   remote_branches=$(git ls-remote --quiet --heads | awk '{print $2}' | sed 's|refs/heads/||g' | sort)
 
   local stale_branches
-  stale_branches=$(diff <(echo "${local_branches}") <(echo "${remote_branches}") | grep '^<' | awk '{print $2}' | grep -vxF "${default_branch}")
+  local wt_branches
+  wt_branches=$(worktree_branches)
+
+  stale_branches=$(diff <(echo "${local_branches}") <(echo "${remote_branches}") | grep '^<' | awk '{print $2}' | grep -vxF "${default_branch}" | grep -vxF -f <(echo "${wt_branches}") || true)
 
   interactive_branch_delete "${stale_branches}" "stale"
 }
@@ -65,8 +72,11 @@ function merged() {
   local default_branch
   default_branch=$(git symbolic-ref refs/remotes/origin/HEAD | sed 's@^refs/remotes/origin/@@')
 
+  local wt_branches
+  wt_branches=$(worktree_branches)
+
   local merged_branches
-  merged_branches=$(git branch --merged | grep -v "${default_branch}\|\*" | sort)
+  merged_branches=$(git branch --merged | grep -v "${default_branch}\|\*\|+" | sed 's/^[[:space:]]*//' | sort | grep -vxF -f <(echo "${wt_branches}") || true)
 
   interactive_branch_delete "${merged_branches}" "merged"
 }
@@ -76,6 +86,9 @@ function old() {
   local current
   current=$(date +%s)
 
+  local wt_branches
+  wt_branches=$(worktree_branches)
+
   local old_branches
   old_branches=$(git for-each-ref refs/heads | while read -r commit _type ref; do
     local headcd
@@ -84,7 +97,7 @@ function old() {
     if [[ $((current-headcd)) -ge ${older_than_seconds} ]]; then
       echo "$ref" | sed 's|refs/heads/||g'
     fi
-  done | sort)
+  done | sort | grep -vxF -f <(echo "${wt_branches}") || true)
 
   interactive_branch_delete "${old_branches}" "old"
 }
