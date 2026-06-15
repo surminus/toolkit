@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# git-compare — open a GitHub compare view, replacing `hub compare`.
+# Drop on PATH as `git-compare`; git exposes it as `git compare`.
+# Resolves the repo via `gh`, so `gh auth login` must be done once.
+set -euo pipefail
+
+usage() {
+  echo "usage: git compare [-u|--url] [-c|--copy] [-b <base>] [<owner>] [<base>..]<head>" >&2
+  exit 1
+}
+
+url_only=false; copy=false; base=""; args=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -u|--url)  url_only=true; shift ;;
+    -c|--copy) copy=true; shift ;;
+    -b|--base) base="${2:-}"; [[ -n "$base" ]] || usage; shift 2 ;;
+    -h|--help) usage ;;
+    --) shift; while [[ $# -gt 0 ]]; do args+=("$1"); shift; done ;;
+    *)  args+=("$1"); shift ;;
+  esac
+done
+
+# two-dot -> three-dot, leave three-dot untouched (matches hub)
+normalize() {
+  local r="$1"
+  if   [[ "$r" == *...* ]]; then printf '%s' "$r"
+  elif [[ "$r" == *..*  ]]; then printf '%s' "${r/../...}"
+  else printf '%s' "$r"; fi
+}
+
+repo_url="$(gh repo view --json url --jq .url)"
+
+case "${#args[@]}" in
+  0)
+    head="$(git rev-parse --abbrev-ref HEAD)"
+    if [[ -n "$base" ]]; then range="${base}...${head}"; else range="$head"; fi ;;
+  1)
+    [[ -z "$base" ]] || usage
+    range="$(normalize "${args[0]}")" ;;
+  2)
+    [[ -z "$base" ]] || usage
+    owner="${args[0]}"
+    range="$(normalize "${args[1]}")"
+    repo_url="$(printf '%s' "$repo_url" | sed -E "s#(://[^/]+/)[^/]+/#\1${owner}/#")" ;;
+  *) usage ;;
+esac
+
+url="${repo_url}/compare/${range}"
+
+if   $url_only; then printf '%s\n' "$url"
+elif $copy;     then printf '%s' "$url" | { command -v wl-copy >/dev/null && wl-copy || xclip -selection clipboard; }
+else            command -v xdg-open >/dev/null && xdg-open "$url" || printf '%s\n' "$url"
+fi
