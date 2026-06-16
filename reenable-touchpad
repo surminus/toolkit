@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Re-enable the laptop touchpad after kwin (Plasma on Wayland) disables it,
+# which it likes to do when a USB device is hotplugged. There is no "disable on
+# external mouse" setting to turn off on Wayland, so we just ask kwin to flip
+# the touchpad's enabled property back on over DBus.
+
+KWIN=org.kde.KWin
+ROOT=/org/kde/KWin/InputDevice
+IFACE=org.kde.KWin.InputDevice
+PROPS=org.freedesktop.DBus.Properties
+
+if ! command -v qdbus >/dev/null; then
+  echo "qdbus not found" >&2
+  exit 1
+fi
+
+get() { qdbus "$KWIN" "$1" "$PROPS.Get" "$IFACE" "$2" 2>/dev/null; }
+
+found=0
+for sysname in $(qdbus "$KWIN" "$ROOT" "$PROPS.Get" org.kde.KWin.InputDeviceManager devicesSysNames 2>/dev/null); do
+  dev="${ROOT}/${sysname}"
+  [[ "$(get "$dev" touchpad)" == "true" ]] || continue
+  found=1
+  name=$(get "$dev" name)
+
+  if [[ "$(get "$dev" enabled)" == "true" ]]; then
+    echo "Already enabled: ${name}"
+    continue
+  fi
+
+  qdbus "$KWIN" "$dev" "$PROPS.Set" "$IFACE" enabled true
+  echo "Re-enabled: ${name}"
+done
+
+if [[ "${found}" -eq 0 ]]; then
+  echo "No touchpad found (is kwin_wayland running?)" >&2
+  exit 1
+fi
