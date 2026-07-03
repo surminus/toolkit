@@ -4,6 +4,19 @@ set -euo pipefail
 # The number of days to try removing old branches
 OLDER_THAN_DAYS=365
 
+# Colours (disabled when not writing to a terminal)
+if [[ -t 1 ]]; then
+  YELLOW=$'\033[0;33m'
+  RESET=$'\033[0m'
+else
+  YELLOW=''
+  RESET=''
+fi
+
+function warn() {
+  echo "${YELLOW}${1}${RESET}" >&2
+}
+
 function interactive_branch_delete() {
   local branches=$1
   local title=$2
@@ -18,18 +31,28 @@ function interactive_branch_delete() {
     echo "${branch}"
   done
 
-  read -p "Delete these branches [y/n/[p]ick]? : " -n 1 -r response
+  read -p "Delete these branches [y/n/[p]ick/[q]uit]? : " -n 1 -r response
   echo
+
+  if [[ ${response} =~ ^[Qq]$ ]]; then
+    echo "Quitting"
+    exit 0
+  fi
 
   if [[ ${response} =~ ^[Pp]$ ]]; then
     for branch in ${branches}; do
       git show "${branch}"
       echo
-      read -p "Delete ${branch}? [y/n] : " -n 1 -r answer
+      read -p "Delete ${branch}? [y/n/[q]uit] : " -n 1 -r answer
       echo
 
+      if [[ ${answer} =~ ^[Qq]$ ]]; then
+        echo "Quitting"
+        exit 0
+      fi
+
       if [[ ${answer} =~ ^[Yy]$ ]]; then
-        git branch -D "${branch}"
+        git branch -D "${branch}" || warn "Failed to delete ${branch}, skipping"
       fi
     done
 
@@ -41,7 +64,7 @@ function interactive_branch_delete() {
   fi
 
   for branch in ${branches}; do
-    git branch -D "${branch}"
+    git branch -D "${branch}" || warn "Failed to delete ${branch}, skipping"
   done
 }
 
@@ -115,18 +138,28 @@ function interactive_worktree_delete() {
     echo "${wt}"
   done
 
-  read -p "Delete these worktrees [y/n/[p]ick]? : " -n 1 -r response
+  read -p "Delete these worktrees [y/n/[p]ick/[q]uit]? : " -n 1 -r response
   echo
+
+  if [[ ${response} =~ ^[Qq]$ ]]; then
+    echo "Quitting"
+    exit 0
+  fi
 
   if [[ ${response} =~ ^[Pp]$ ]]; then
     for wt in ${worktrees}; do
       echo "Worktree: ${wt}"
       echo
-      read -p "Delete ${wt}? [y/n] : " -n 1 -r answer
+      read -p "Delete ${wt}? [y/n/[q]uit] : " -n 1 -r answer
       echo
 
+      if [[ ${answer} =~ ^[Qq]$ ]]; then
+        echo "Quitting"
+        exit 0
+      fi
+
       if [[ ${answer} =~ ^[Yy]$ ]]; then
-        git worktree remove "${wt}"
+        git worktree remove "${wt}" || warn "Failed to remove ${wt}, skipping"
       fi
     done
 
@@ -138,7 +171,7 @@ function interactive_worktree_delete() {
   fi
 
   for wt in ${worktrees}; do
-    git worktree remove "${wt}"
+    git worktree remove "${wt}" || warn "Failed to remove ${wt}, skipping"
   done
 }
 
