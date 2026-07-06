@@ -1,0 +1,155 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# The number of days to try removing old remote branches
+OLDER_THAN_DAYS=90
+
+# Colours (disabled when not writing to a terminal)
+if [[ -t 1 ]]; then
+  YELLOW=$'\033[0;33m'
+  RESET=$'\033[0m'
+else
+  YELLOW=''
+  RESET=''
+fi
+
+function warn() {
+  echo "${YELLOW}${1}${RESET}" >&2
+}
+
+function usage() {
+  echo "Usage: gh-stale [-d|--days N] [owner/repo]"
+  echo
+  echo "Finds remote branches older than N days (default ${OLDER_THAN_DAYS}) and"
+  echo "lets you delete them via the gh CLI. Defaults to the current repository."
+}
+
+function delete_remote_branch() {
+  local branch=$1
+  gh api -X DELETE "repos/${REPO}/git/refs/heads/${branch}" --silent \
+    || warn "Failed to delete ${branch}, skipping"
+}
+
+function show_branch() {
+  local branch=$1
+  gh api "repos/${REPO}/commits/${branch}" \
+    --jq '"commit  \(.sha)\nauthor  \(.commit.author.name) <\(.commit.author.email)>\ndate    \(.commit.author.date)\n\n\(.commit.message)"' \
+    || warn "Could not fetch details for ${branch}"
+}
+
+function interactive_branch_delete() {
+  local branches=$1
+
+  if [[ -z "${branches}" ]]; then
+    echo "No stale branches discovered"
+    return
+  fi
+
+  echo "Stale branches to delete:"
+  for branch in ${branches}; do
+    echo "${branch}"
+  done
+
+  read -p "Delete these branches [y/n/[p]ick/[q]uit]? : " -n 1 -r response
+  echo
+
+  if [[ ${response} =~ ^[Qq]$ ]]; then
+    echo "Quitting"
+    exit 0
+  fi
+
+  if [[ ${response} =~ ^[Pp]$ ]]; then
+    for branch in ${branches}; do
+      show_branch "${branch}"
+      echo
+      read -p "Delete ${branch}? [y/n/[q]uit] : " -n 1 -r answer
+      echo
+
+      if [[ ${answer} =~ ^[Qq]$ ]]; then
+        echo "Quitting"
+        exit 0
+      fi
+
+      if [[ ${answer} =~ ^[Yy]$ ]]; then
+        delete_remote_branch "${branch}"
+      fi
+    done
+
+    return
+  fi
+
+  if [[ ! ${response} =~ ^[Yy]$ ]]; then
+    return
+  fi
+
+  for branch in ${branches}; do
+    delete_remote_branch "${branch}"
+  done
+}
+
+function stale_branches() {
+  local older_than_seconds=$((60 * 60 * 24 * OLDER_THAN_DAYS))
+
+  gh api graphql --paginate \
+    -f owner="${OWNER}" -f name="${NAME}" \
+    -f query='
+      query($owner:String!, $name:String!, $endCursor:String) {
+        repository(owner:$owner, name:$name) {
+          refs(refPrefix:"refs/heads/", first:100, after:$endCursor) {
+            pageInfo { hasNextPage endCursor }
+            nodes {
+              name
+              target { ... on Commit { committedDate author { user { login } } } }
+            }
+          }
+        }
+      }' \
+    --jq ".data.repository.refs.nodes[] | select((now - (.target.committedDate | fromdateiso8601)) >= ${older_than_seconds}) | select(.target.author.user.login == \"${LOGIN}\") | .name"
+}
+
+function main() {
+  local repo=""
+
+  while [[ $# -gt 0 ]]; do
+    case $1 in
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      -d|--days)
+        if [[ -z ${2:-} || ! ${2} =~ ^[0-9]+$ ]]; then
+          warn "--days requires a positive integer"
+          exit 1
+        fi
+        OLDER_THAN_DAYS=$2
+        shift 2
+        ;;
+      -*)
+        warn "Unknown option: $1"
+        usage
+        exit 1
+        ;;
+      *)
+        repo=$1
+        shift
+        ;;
+    esac
+  done
+
+  REPO=${repo:-$(gh repo view --json nameWithOwner -q .nameWithOwner)}
+  OWNER=${REPO%%/*}
+  NAME=${REPO#*/}
+  LOGIN=$(gh api user --jq .login)
+
+  local default_branch
+  default_branch=$(gh repo view "${REPO}" --json defaultBranchRef -q .defaultBranchRef.name)
+
+  echo "Looking for ${LOGIN}'s branches in ${REPO} older than ${OLDER_THAN_DAYS} days"
+
+  local branches
+  branches=$(stale_branches | grep -vxF "${default_branch}" | sort || true)
+
+  interactive_branch_delete "${branches}"
+}
+
+main "$@"
