@@ -1,58 +1,88 @@
 #!/bin/bash
 #
-ALIAS=$1
 ALIAS_FILE="$HOME/.pairs"
-EMAIL_SUFFIX=$(grep email "$ALIAS_FILE" | cut -d "=" -f2)
+EMAIL_SUFFIX=$(grep -m1 "^email=" "$ALIAS_FILE" 2>/dev/null | cut -d "=" -f2)
 
 usage() {
   cat << EOF
-Usage: pair <alias | name | git user>
+Usage: pair <alias | name | git user | email address> [...]
 
 Create a file called $ALIAS_FILE with a csv format of:
 
-  alias,full name,git user
+  alias,full name,git user or email address
 
 Ensure there is an email suffix for your org:
 
   email=example.com
+
+Alternatively, supply a full email address directly:
+
+  pair jane.doe@example.com
 EOF
 }
 
-if [[ -z "$EMAIL_SUFFIX" ]]; then
-  echo "Error: Missing email suffix in $ALIAS_FILE"
+if [[ $# -eq 0 ]]; then
   usage && exit 1
 fi
 
-if [[ -z "$ALIAS" ]]; then
-  usage && exit 1
-fi
+# Exact alias match wins; otherwise first case-insensitive substring match
+# anywhere in an entry. The email= config line is never matched.
+lookup() {
+  awk -F, -v q="$1" '
+    BEGIN { lq = tolower(q) }
+    /^email=/ { next }
+    tolower($1) == lq { print; exact = 1; exit }
+    !found && index(tolower($0), lq) { found = $0 }
+    END { if (!exact && found) print found }
+  ' "$ALIAS_FILE"
+}
 
-template() {
+trailer() {
   name=$1
-  email_prefix="$(echo "$1" | sed 's/ /./g' | tr '[:upper:]' '[:lower:]')"
   git_user=$2
 
-  email="${email_prefix}@${EMAIL_SUFFIX}"
-
-
-  if [[ -n "$git_user" ]]; then
-  cat << EOF
-Co-authored-by: $git_user <$email>
-EOF
+  if [[ "$git_user" == *"@"* ]]; then
+    email="$git_user"
+    git_user=""
   else
-  cat << EOF
-Co-authored-by: $name <$email>
-EOF
+    if [[ -z "$EMAIL_SUFFIX" ]]; then
+      echo "Error: Missing email suffix in $ALIAS_FILE" >&2
+      return 1
+    fi
+    email="$(echo "$name" | sed 's/ /./g' | tr '[:upper:]' '[:lower:]')@${EMAIL_SUFFIX}"
   fi
+
+  echo "Co-authored-by: ${git_user:-$name} <$email>"
 }
 
-NAME=$(grep -i "$ALIAS" "$ALIAS_FILE" | cut -d "," -f2)
-GIT_USER=$(grep -i "$ALIAS" "$ALIAS_FILE" | cut -d "," -f3)
+STATUS=0
 
-if [[ -z "$NAME" ]]; then
-  echo -e "Alias or name not found! Choose from:\n"
-  sort "$ALIAS_FILE" | grep -v "email"
-  exit 1
-fi
+for ALIAS in "$@"; do
+  if [[ "$ALIAS" == *"@"* ]]; then
+    NAME=$(echo "${ALIAS%%@*}" | sed 's/[._]/ /g' | sed 's/\b./\u&/g')
+    echo "Co-authored-by: $NAME <$ALIAS>"
+    continue
+  fi
 
-template "$NAME" "$GIT_USER"
+  if [[ ! -f "$ALIAS_FILE" ]]; then
+    echo "Error: $ALIAS_FILE not found" >&2
+    usage
+    exit 1
+  fi
+
+  LINE=$(lookup "$ALIAS")
+
+  if [[ -z "$LINE" ]]; then
+    echo -e "'$ALIAS' not found! Choose from:\n" >&2
+    grep -v "^email=" "$ALIAS_FILE" | sort >&2
+    STATUS=1
+    continue
+  fi
+
+  NAME=$(echo "$LINE" | cut -d "," -f2)
+  GIT_USER=$(echo "$LINE" | cut -d "," -f3)
+
+  trailer "$NAME" "$GIT_USER" || STATUS=1
+done
+
+exit $STATUS
