@@ -1,0 +1,142 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Recover the Intel Wi-Fi 6 AX201 after a resume from suspend, where the
+# firmware comes back in a state that never associates. The AP is visible at
+# full signal, but wpa_supplicant loops authenticating -> disconnected until
+# NetworkManager gives up with "association took too long" and reason
+# 'ssid-not-found'. That reads like a WPA3/SAE failure, but it isn't: the
+# connection profile is fine, the firmware just didn't come back cleanly.
+#
+# Reloading iwlwifi resets it, and NetworkManager re-detects the device and
+# reconnects on its own. This also covers the case where a previous reload
+# removed the module and never put it back, which leaves no wifi device at all.
+
+usage() {
+  cat <<'EOF'
+Usage: reenable-wifi [--force]
+
+Reloads the iwlwifi driver and waits for NetworkManager to reconnect.
+
+  --force   reload even if wifi is currently connected
+EOF
+}
+
+force=0
+case "${1:-}" in
+  --force) force=1 ;;
+  -h | --help)
+    usage
+    exit 0
+    ;;
+  "") ;;
+  *)
+    usage >&2
+    exit 1
+    ;;
+esac
+
+if ! command -v nmcli >/dev/null; then
+  echo "nmcli not found" >&2
+  exit 1
+fi
+
+# Everything past the state check needs root, so ask for it up front rather
+# than half way through.
+if [[ "${EUID}" -ne 0 ]]; then
+  exec sudo -- "$0" "$@"
+fi
+
+wifi_device() {
+  nmcli -t -f DEVICE,TYPE device status | awk -F: '$2 == "wifi" { print $1; exit }'
+}
+
+wifi_state() {
+  nmcli -t -f DEVICE,STATE device status | awk -F: -v d="$1" '$1 == d { print $2; exit }'
+}
+
+dev="$(wifi_device)"
+
+if [[ -n "${dev}" && "$(wifi_state "${dev}")" == "connected" && "${force}" -eq 0 ]]; then
+  ssid=$(nmcli -t -f DEVICE,CONNECTION device status | awk -F: -v d="${dev}" '$1 == d { print $2; exit }')
+  echo "Already connected on ${dev} (${ssid}), nothing to do. Use --force to reload anyway."
+  exit 0
+fi
+
+# iwlwifi dynamically loads iwlmvm (or iwldvm), and those have to come out
+# first. Only remove what is actually loaded, so this works whether the driver
+# is wedged or already gone.
+loaded=()
+for mod in iwlmvm iwldvm iwlwifi; do
+  if [[ -d "/sys/module/${mod}" ]]; then
+    loaded+=("${mod}")
+  fi
+done
+
+if [[ "${#loaded[@]}" -gt 0 ]]; then
+  echo "Unloading: ${loaded[*]}"
+  modprobe -r "${loaded[@]}"
+else
+  echo "iwlwifi was not loaded"
+fi
+
+echo "Loading: iwlwifi"
+modprobe iwlwifi
+
+# Wait for NetworkManager to notice the device come back.
+for _ in $(seq 1 20); do
+  dev="$(wifi_device)"
+  [[ -n "${dev}" ]] && break
+  sleep 1
+done
+
+if [[ -z "${dev}" ]]; then
+  echo "No wifi device appeared after reloading iwlwifi" >&2
+  echo "Check 'journalctl -k -e | grep iwlwifi' for firmware errors" >&2
+  exit 1
+fi
+
+echo "Device back: ${dev}"
+
+# A wedged device can leave the radio soft blocked or switched off in
+# NetworkManager, in which case it will never autoconnect.
+if command -v rfkill >/dev/null && [[ "$(rfkill --output SOFT --noheadings list wlan | tr -d ' ')" == "blocked" ]]; then
+  echo "Radio was soft blocked, unblocking"
+  rfkill unblock wlan
+fi
+
+if [[ "$(nmcli radio wifi)" != "enabled" ]]; then
+  echo "Wifi was disabled in NetworkManager, enabling"
+  nmcli radio wifi on
+fi
+
+# NetworkManager usually autoconnects from here. Give it a chance before
+# nudging it, so we do not fight its own retry.
+state=""
+for _ in $(seq 1 30); do
+  state="$(wifi_state "${dev}")"
+  [[ "${state}" == "connected" ]] && break
+  sleep 1
+done
+
+if [[ "${state}" != "connected" ]]; then
+  echo "Still ${state:-unknown} after reload, asking NetworkManager to connect"
+  nmcli device connect "${dev}" || true
+
+  for _ in $(seq 1 30); do
+    state="$(wifi_state "${dev}")"
+    [[ "${state}" == "connected" ]] && break
+    sleep 1
+  done
+fi
+
+if [[ "${state}" == "connected" ]]; then
+  ssid=$(nmcli -t -f DEVICE,CONNECTION device status | awk -F: -v d="${dev}" '$1 == d { print $2; exit }')
+  echo "Connected: ${ssid}"
+  exit 0
+fi
+
+echo "Reloaded the driver, but ${dev} is ${state:-unknown}" >&2
+echo "If NetworkManager logs 'no secrets: No agents were available', the KDE" >&2
+echo "secret agent has died: run 'kstart5 kded5' as your user, then retry." >&2
+exit 1
