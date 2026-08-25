@@ -37,7 +37,12 @@ main() {
   if git show-ref --verify --quiet "refs/heads/${branch_name}"; then
     git worktree add "../${new_tree_path_name}" "${branch_name}" >/dev/null
   else
-    git worktree add -b "${branch_name}" "../${new_tree_path_name}" >/dev/null
+    local default_branch
+    default_branch=$(git symbolic-ref refs/remotes/origin/HEAD | sed 's@^refs/remotes/origin/@@')
+
+    git fetch --quiet origin "${default_branch}" || true
+
+    git worktree add --no-track -b "${branch_name}" "../${new_tree_path_name}" "origin/${default_branch}" >/dev/null
   fi
 
   local tree_path
